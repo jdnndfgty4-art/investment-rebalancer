@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101827">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>投資再平衡計算器</title>
+<style>
+:root{--bg:#f3f5f8;--card:#fff;--ink:#172033;--muted:#687386;--line:#e4e8ef;--blue:#2563eb;--green:#087f5b;--red:#c2413b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#101827;color:white;padding:24px 18px 20px;padding-top:calc(22px + env(safe-area-inset-top))}
+header h1{font-size:23px;margin:0 0 6px}header p{margin:0;color:#c7d0df;font-size:13px}
+main{max-width:760px;margin:auto;padding:14px 14px 42px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:0 0 13px;box-shadow:0 2px 8px #17203308}
+h2{font-size:17px;margin:0 0 12px}.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}
+label{display:block;color:var(--muted);font-size:12px;margin:0 0 6px}
+input,select,button{font:inherit;border-radius:10px;border:1px solid var(--line);padding:11px 12px;background:white;color:var(--ink);width:100%;min-width:0}
+input[type=number]{text-align:right}button{background:var(--blue);color:white;border:0;font-weight:650;cursor:pointer}
+button.secondary{background:#edf2ff;color:#2149a5}button.ghost{background:#f2f4f7;color:#334155}button.danger{background:#fff0ef;color:var(--red)}
+button.small{width:auto;padding:8px 11px;font-size:13px}
+.asset{display:grid;grid-template-columns:1fr 1fr 38px;gap:8px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}
+.asset:last-child{border:0}.asset .wide{grid-column:1/-1}.asset .remove{height:42px;padding:0}
+.metric{background:#f6f8fb;border-radius:12px;padding:12px}.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{font-size:21px}
+.result{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:9px}
+.result-head{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.result small{display:block;color:var(--muted);margin-top:5px}
+.buy{color:var(--green);font-weight:700}.sell{color:var(--red);font-weight:700}.ok{color:var(--muted);font-weight:700}
+.bar{height:8px;background:#edf0f5;border-radius:9px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:#4f7de8}
+.note{font-size:12px;color:var(--muted);line-height:1.5}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1;min-width:110px}
+.total{font-size:25px;font-weight:750;letter-spacing:-.5px}
+@media(min-width:600px){.asset{grid-template-columns:1.2fr 1fr 1fr 42px}.asset .wide{grid-column:auto}}
+</style>
+</head>
+<body>
+<header><h1>投資再平衡計算器</h1><p>美元計價・自訂 ETF・多組投資組合・自動保存</p></header>
+<main>
+<section class="card">
+<h2>投資組合</h2>
+<div class="row">
+  <div><label for="portfolio">選擇組合</label><select id="portfolio"></select></div>
+  <div style="flex:0 0 112px"><label>&nbsp;</label><button class="secondary" id="newPortfolio">新增組合</button></div>
+</div>
+<div class="row" style="margin-top:9px">
+  <div><label for="rename">組合名稱</label><input id="rename" placeholder="例如：退休長期投資"></div>
+  <div style="flex:0 0 112px"><label>&nbsp;</label><button class="ghost" id="renameBtn">更新名稱</button></div>
+</div>
+</section>
+
+<section class="card">
+<h2>目標配置與目前市值</h2>
+<p class="note">所有金額均以美元 USD 輸入。目標比例總和需為 100%。</p>
+<div id="assets"></div>
+<div class="actions" style="margin-top:12px">
+<button class="secondary" id="addAsset">＋ 新增 ETF／資產</button>
+<button class="ghost" id="reset">恢復範例配置</button>
+</div>
+</section>
+
+<section class="card">
+<h2>資產總覽</h2>
+<div class="row">
+ <div class="metric"><span>目前總資產</span><strong id="total">$0.00</strong></div>
+ <div class="metric"><span>目標比例合計</span><strong id="weightTotal">0%</strong></div>
+</div>
+<div id="allocation" style="margin-top:12px"></div>
+</section>
+
+<section class="card">
+<h2>再平衡結果</h2>
+<p class="note">理想金額＝目前總資產 × 目標比例。正數代表買進，負數代表賣出。計算不包含稅費、交易成本及匯率。</p>
+<div id="results"></div>
+</section>
+<section class="card">
+<h2>資料與備份</h2>
+<div class="actions">
+<button class="secondary" id="export">匯出備份</button>
+<button class="ghost" id="importBtn">匯入備份</button>
+<input id="importFile" type="file" accept="application/json" hidden>
+</div>
+<p class="note" style="margin-top:10px">資料會自動保存在此瀏覽器。若清除瀏覽器資料或更換手機，請先匯出備份。此版本不會連接券商帳戶或自動下單。</p>
+</section>
+</main>
+<script>
+const KEY='rebalance_usd_app_v1';
+const sample=[{name:'VOO',target:45,value:0},{name:'QQQM',target:10,value:0},{name:'AVUV',target:10,value:0},{name:'VXUS',target:10,value:0},{name:'BND',target:20,value:0},{name:'Cash',target:5,value:0}];
+let db=load();
+function load(){try{let x=JSON.parse(localStorage.getItem(KEY));if(x&&x.portfolios?.length)return x}catch(e){}return {active:0,portfolios:[{name:'長期投資組合',assets:sample}]}}
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function current(){return db.portfolios[db.active]}
+function money(n){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(n||0)}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(){
+ const sel=document.getElementById('portfolio');sel.innerHTML=db.portfolios.map((p,i)=>`<option value="${i}" ${i===db.active?'selected':''}>${esc(p.name)}</option>`).join('');
+ document.getElementById('rename').value=current().name;
+ const wrap=document.getElementById('assets');
+ wrap.innerHTML=current().assets.map((a,i)=>`<div class="asset">
+  <div class="wide"><label>ETF／資產名稱</label><input data-i="${i}" data-k="name" value="${esc(a.name)}" placeholder="例如 VOO"></div>
+  <div><label>目標比例 (%)</label><input type="number" min="0" step="0.1" data-i="${i}" data-k="target" value="${a.target}"></div>
+  <div><label>目前市值 (USD)</label><input type="number" min="0" step="0.01" data-i="${i}" data-k="value" value="${a.value}"></div>
+  <button class="danger remove" data-remove="${i}" aria-label="刪除">×</button>
+ </div>`).join('');
+ wrap.querySelectorAll('input').forEach(el=>el.addEventListener('input',e=>{let a=current().assets[+e.target.dataset.i],k=e.target.dataset.k;a[k]=k==='name'?e.target.value:(Math.max(0,Number(e.target.value)||0));save();renderSummary()}));
+ wrap.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{current().assets.splice(+b.dataset.remove,1);save();render()}));
+ renderSummary();
+}
+function renderSummary(){
+ const as=current().assets,total=as.reduce((s,a)=>s+(Number(a.value)||0),0),weights=as.reduce((s,a)=>s+(Number(a.target)||0),0);
+ document.getElementById('total').textContent=money(total);
+ document.getElementById('weightTotal').textContent=weights.toFixed(1)+'%';
+ const alloc=document.getElementById('allocation');
+ alloc.innerHTML=as.map(a=>`<div style="margin:10px 0"><div class="result-head"><span>${esc(a.name||'未命名')}</span><span>${(Number(a.value)||0)/Math.max(total,1)*100 .toFixed?.(1)||'0'}%</span></div><div class="bar"><i style="width:${total?Math.min(100,(a.value/total)*100):0}%"></i></div></div>`).join('');
+ const res=document.getElementById('results');
+ if(Math.abs(weights-100)>0.001){res.innerHTML=`<p class="sell">目標比例目前合計 ${weights.toFixed(2)}%，請調整至100%後再看結果。</p>`;return}
+ if(total<=0){res.innerHTML='<p class="note">請輸入至少一項資產的目前市值。</p>';return}
+ res.innerHTML=as.map(a=>{let desired=total*a.target/100,diff=desired-a.value,actual=a.value/total*100;
+ let action=Math.abs(diff)<0.005?'<span class="ok">不需調整</span>':diff>0?`<span class="buy">買進 ${money(diff)}</span>`:`<span class="sell">賣出 ${money(-diff)}</span>`;
+ return `<div class="result"><div class="result-head"><span>${esc(a.name||'未命名')}</span>${action}</div><small>目前 ${money(a.value)}（${actual.toFixed(2)}%） · 目標 ${a.target}%（${money(desired)}）</small></div>`}).join('');
+}
+document.getElementById('portfolio').addEventListener('change',e=>{db.active=+e.target.value;save();render()});
+document.getElementById('newPortfolio').addEventListener('click',()=>{let name=prompt('新組合名稱？','新投資組合');if(!name)return;db.portfolios.push({name,assets:sample.map(a=>({...a}))});db.active=db.portfolios.length-1;save();render()});
+document.getElementById('renameBtn').addEventListener('click',()=>{let n=document.getElementById('rename').value.trim();if(n){current().name=n;save();render()}});
+document.getElementById('addAsset').addEventListener('click',()=>{current().assets.push({name:'新資產',target:0,value:0});save();render()});
+document.getElementById('reset').addEventListener('click',()=>{if(confirm('將目前組合恢復為 VOO、QQQM、AVUV、VXUS、BND、Cash 範例配置？')){current().assets=sample.map(a=>({...a}));save();render()}});
+document.getElementById('export').addEventListener('click',()=>{let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='rebalance-backup.json';a.click();URL.revokeObjectURL(url)});
+document.getElementById('importBtn').addEventListener('click',()=>document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change',async e=>{let f=e.target.files[0];if(!f)return;try{let x=JSON.parse(await f.text());if(!x.portfolios?.length)throw Error();db=x;db.active=Math.min(db.active||0,db.portfolios.length-1);save();render();alert('備份匯入成功')}catch(err){alert('檔案格式不正確')}e.target.value=''});
+render();
+</script>
+<script>if ("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));</script>
+</body></html>
